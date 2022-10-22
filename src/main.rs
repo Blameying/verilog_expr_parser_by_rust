@@ -29,10 +29,12 @@ fn parser_exp(expr: &str) -> bool {
         Ok(t) => {
             println!("AST Tree:");
             print_tree_with(&t, &config).unwrap();
+            println!("----------------------------------------------");
             true
         }
         Err(e) => {
             println!("Error: {:?}", e);
+            println!("----------------------------------------------");
             false
         }
     }
@@ -56,10 +58,12 @@ fn parser_module(expr: &str) -> bool {
         Ok(t) => {
             println!("AST Tree:");
             print_tree_with(&t, &config).unwrap();
+            println!("----------------------------------------------");
             true
         }
         Err(e) => {
             println!("Error: {:?}", e);
+            println!("----------------------------------------------");
             false
         }
     }
