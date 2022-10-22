@@ -1,0 +1,164 @@
+use std::str::FromStr;
+use crate::ast::TreeNode;
+use regex::Regex;
+use lalrpop_util::ParseError;
+
+grammar;
+
+UnsignNum: String = <s:r"(0|[1-9][0-9]*)"> => String::from_str(s).unwrap();
+UnsignNumSeq: String = <s:r"0[0-9]+"> => String::from_str(s).unwrap();
+SignNum: String = <s:r"(\+|-)(0|[1-9][0-9]*)"> => String::from_str(s).unwrap();
+Base: String = <s:r"'[b|B|o|O|d|D]"> => String::from_str(s).unwrap();
+BaseHex: String = <s:r"'[h|H][0-9a-fA-F]+"> => String::from_str(s).unwrap();
+Identifier: String = <s:r"[_A-Za-z][_A-Za-z0-9]*"> => String::from_str(s).unwrap();
+
+pub Module_scope: TreeNode = {
+  "module" <i:Identifier> "(" <p:Module_parameters_list> ")" "{" <mut v:Defination*> "}" => TreeNode::new("module", "module".to_string(), vec![TreeNode::new("Identifier", i, vec![]), p, TreeNode::new("block", "block".to_string(), v)]),
+}
+
+pub Module_parameters_list: TreeNode = {
+  <l:Module_parameters_list> "," <r:Module_parameters> => {
+    let mut subs = Vec::from(l.subs);
+    subs.push(r);
+    TreeNode::new("list", ",".to_string(), subs)
+  },
+  <l:Module_parameters> => TreeNode::new("list", ",".to_string(), vec![l])
+}
+
+pub Defination: TreeNode = {
+  "wire" <i:Identifier> ";" => TreeNode::new("Defination", "Wire".to_string(), vec![TreeNode::new("Identifier", i, vec![])]),
+  "assign" <i:Identifier> "=" <r:Expr> ";" => TreeNode::new("Defination", "Assign".to_string(), vec![TreeNode::new("Identifier", i, vec![]), r])
+}
+
+pub Module_parameters: TreeNode = {
+    "input" <b:Bit_array?> <i:Identifier> => match b {
+        None => TreeNode::new("input", "input".to_string(), vec![TreeNode::new("Identifier", i, vec![])]),
+        Some(v) => TreeNode::new("input", "input".to_string(), vec![v, TreeNode::new("Identifier", i, vec![])])
+      },
+    "output" <b:Bit_array?> <i:Identifier> => match b {
+        None => TreeNode::new("output", "output".to_string(), vec![TreeNode::new("Identifier", i, vec![])]),
+        Some(v) => TreeNode::new("output", "output".to_string(), vec![v, TreeNode::new("Identifier", i, vec![])]), 
+      },
+}
+
+Bit_array: TreeNode = {
+    "[" <l:Expr> ":" <r:Expr> "]" => TreeNode::new("[:]", "[:]".to_string(), vec![l, r]),
+}
+
+pub Expr: TreeNode = {
+    <l:Expr> "||" <r:Factor> => TreeNode::new("||", "||".to_string(), vec![l, r]),
+    <l:Expr> "&&" <r:Factor> => TreeNode::new("&&", "&&".to_string(), vec![l, r]),
+    Factor,
+}
+
+Factor: TreeNode = {
+    <l:Factor> "|" <r:SubFactor> => TreeNode::new("|", "|".to_string(), vec![l, r]),
+    <l:Factor> "&" <r:SubFactor> => TreeNode::new("&", "&".to_string(), vec![l, r]),
+    <l:Factor> "^" <r:SubFactor> => TreeNode::new("^", "^".to_string(), vec![l, r]),
+    SubFactor,
+}
+
+SubFactor: TreeNode= {
+    "~" <l:Term> => TreeNode::new("~", "~".to_string(), vec![l]),
+    "!" <l:Term> => TreeNode::new("!", "!".to_string(), vec![l]),
+    "&" <r:Term> => TreeNode::new("&", "&".to_string(), vec![r]),
+    "~&" <r:Term> => TreeNode::new("~&", "~&".to_string(), vec![r]),
+    "|" <r:Term> => TreeNode::new("|", "|".to_string(), vec![r]),
+    "^|" <r:Term> => TreeNode::new("^|", "^|".to_string(), vec![r]),
+    "^" <r:Term> => TreeNode::new("^", "^".to_string(), vec![r]),
+    "~^" <r:Term> => TreeNode::new("~^", "~^".to_string(), vec![r]),
+    Term,
+}
+
+Term: TreeNode = {
+    Num => <>,
+    Identifier => TreeNode::new("Identifier", <>, vec![]),
+    <i:Identifier> "[" <n:UnsignNum> "]" => TreeNode::new("Identifier[]", "[]".to_string(), vec![TreeNode::new("Identifier", i, vec![]), TreeNode::new("UnsignNum", n, vec![])]),
+    "(" <l:Expr> ")" => l
+}
+
+Num: TreeNode = {
+    SignNum => TreeNode::new("SignNum", <>, vec![]),
+    UnsignNum => {
+      TreeNode::new("UnsignNum", <>, vec![])
+    },
+    <l: UnsignNum?> <b:Base> <r:UnsignNumSeq> =>? {
+      
+      let b_re = Regex::new(r"[01]+").unwrap();
+      let o_re = Regex::new(r"[0-7]+").unwrap();
+      match b.to_lowercase().as_str() {
+        "'b" => {
+          if !b_re.is_match(r.as_str()) {
+            return Err(ParseError::User {
+              error: "invalid binary base number."
+            })
+          }
+        },
+        "'o" => {
+            if !o_re.is_match(r.as_str()) {
+                return Err(ParseError::User {
+                    error: "invaild octal base number."
+                  })
+              }
+        },
+        _ => ()
+      };
+      match l {
+        None => Ok(TreeNode::new("NumWithBase", b + &r, vec![])),
+        Some(v) => {
+          if let Err(e) = v.parse::<usize>() {
+            return Err(ParseError::User {
+                error: "invaild number"
+              }) 
+          }
+          Ok(TreeNode::new("NumWithBase", v + &b + &r, vec![]))
+        }
+      }
+    },
+    <l: UnsignNum?> <b:Base> <r:UnsignNum> =>? {
+      
+      let b_re = Regex::new(r"[01]+").unwrap();
+      let o_re = Regex::new(r"[0-7]+").unwrap();
+      match b.to_lowercase().as_str() {
+        "'b" => {
+          if !b_re.is_match(r.as_str()) {
+            return Err(ParseError::User {
+              error: "invalid binary base number."
+            })
+          }
+        },
+        "'o" => {
+            if !o_re.is_match(r.as_str()) {
+                return Err(ParseError::User {
+                    error: "invaild octal base number."
+                  })
+              }
+        },
+        _ => ()
+      };
+      match l {
+        None => Ok(TreeNode::new("NumWithBase", b + &r, vec![])),
+        Some(v) => {
+          if let Err(e) = v.parse::<usize>() {
+            return Err(ParseError::User {
+                error: "invaild number"
+              }) 
+          }
+          Ok(TreeNode::new("NumWithBase", v + &b + &r, vec![]))
+        }
+      }
+    },
+    <l: UnsignNum?> <b:BaseHex> =>? {
+      match l {
+        None => Ok(TreeNode::new("NumWithBase", b, vec![])),
+        Some(v) => {
+          if let Err(e) = v.parse::<usize>() {
+            return Err(ParseError::User {
+                error: "invaild number"
+              }) 
+          }
+          Ok(TreeNode::new("NumWithBase", v + &b, vec![]))
+        }
+      }
+    }
+}
