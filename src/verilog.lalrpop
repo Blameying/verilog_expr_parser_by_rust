@@ -13,7 +13,7 @@ BaseHex: String = <s:r"'[h|H][0-9a-fA-F]+"> => String::from_str(s).unwrap();
 Identifier: String = <s:r"[_A-Za-z][_A-Za-z0-9]*"> => String::from_str(s).unwrap();
 
 pub Module_scope: TreeNode = {
-  "module" <i:Identifier> "(" <p:Module_parameters_list> ")" "{" <mut v:Defination*> "}" => TreeNode::new("module", "module".to_string(), vec![TreeNode::new("Identifier", i, vec![]), p, TreeNode::new("block", "block".to_string(), v)]),
+  "module" <i:Identifier> "(" <p:Module_parameters_list> ")" "{" <v:Defination*> "}" => TreeNode::new("module", "module".to_string(), vec![TreeNode::new("Identifier", i, vec![]), p, TreeNode::new("block", "block".to_string(), v)]),
 }
 
 pub Module_parameters_list: TreeNode = {
