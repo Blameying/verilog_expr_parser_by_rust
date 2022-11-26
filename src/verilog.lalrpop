@@ -46,19 +46,40 @@ Bit_array: TreeNode = {
 }
 
 pub Expr: TreeNode = {
-    <l:Expr> "||" <r:Factor> => TreeNode::new("||", "||".to_string(), vec![l, r]),
-    <l:Expr> "&&" <r:Factor> => TreeNode::new("&&", "&&".to_string(), vec![l, r]),
-    Factor,
+    <l:Expr> "||" <r:Factor_5> => TreeNode::new("||", "||".to_string(), vec![l, r]),
+    Factor_6,
 }
 
-Factor: TreeNode = {
-    <l:Factor> "|" <r:SubFactor> => TreeNode::new("|", "|".to_string(), vec![l, r]),
-    <l:Factor> "&" <r:SubFactor> => TreeNode::new("&", "&".to_string(), vec![l, r]),
-    <l:Factor> "^" <r:SubFactor> => TreeNode::new("^", "^".to_string(), vec![l, r]),
-    SubFactor,
+
+Factor_6: TreeNode = {
+    <l:Factor_6> "&&" <r:Factor_5> => TreeNode::new("&&", "&&".to_string(), vec![l, r]),
+    Factor_5, 
 }
 
-SubFactor: TreeNode= {
+Factor_5: TreeNode = {
+    <l:Factor_5> "|" <r:Factor_4> => TreeNode::new("|", "|".to_string(), vec![l, r]),
+    Factor_4,
+}
+
+Factor_4: TreeNode = {
+    <l:Factor_4> "&" <r:Factor_3> => TreeNode::new("&", "&".to_string(), vec![l, r]),
+    Factor_3,
+}
+
+Factor_3: TreeNode = {
+    <l:Factor_3> "+" <r:Factor_2> => TreeNode::new("+", "+".to_string(), vec![l, r]),
+    <l:Factor_3> "-" <r:Factor_2> => TreeNode::new("-", "-".to_string(), vec![l, r]),
+    Factor_2,
+}
+
+Factor_2: TreeNode = {
+    "*" <l:Factor_1> => TreeNode::new("*", "*".to_string(), vec![l]),
+    "/" <l:Factor_1> => TreeNode::new("/", "/".to_string(), vec![l]),
+    "%" <l:Factor_1> => TreeNode::new("%", "%".to_string(), vec![l]),
+    Factor_1,
+}
+
+Factor_1: TreeNode= {
     "~" <l:Term> => TreeNode::new("~", "~".to_string(), vec![l]),
     "!" <l:Term> => TreeNode::new("!", "!".to_string(), vec![l]),
     "&" <r:Term> => TreeNode::new("&", "&".to_string(), vec![r]),
@@ -66,6 +87,7 @@ SubFactor: TreeNode= {
     "|" <r:Term> => TreeNode::new("|", "|".to_string(), vec![r]),
     "^|" <r:Term> => TreeNode::new("^|", "^|".to_string(), vec![r]),
     "^" <r:Term> => TreeNode::new("^", "^".to_string(), vec![r]),
+    "^~" <r:Term> => TreeNode::new("^~", "^~".to_string(), vec![r]),
     "~^" <r:Term> => TreeNode::new("~^", "~^".to_string(), vec![r]),
     Term,
 }
