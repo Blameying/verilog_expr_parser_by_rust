@@ -393,6 +393,7 @@ version = "0.1.0"
 dependencies = [
  "lalrpop",
  "lalrpop-util",
+ "lazy_static 1.4.0",
  "ptree",
  "regex",
 ]

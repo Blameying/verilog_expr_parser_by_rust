@@ -10,6 +10,7 @@ use std::env;
 
 lalrpop_mod!(pub verilog);
 pub mod ast;
+pub mod bdd;
 
 fn parser_exp(expr: &str) -> bool {
     let config = {
