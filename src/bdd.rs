@@ -75,8 +75,14 @@ impl From<&TreeNode> for BNode {
 impl BNode {
     pub fn eval(&self) -> Option<bool> {
         if self.is_leave {
+            println!(
+                "leave: {}, operator: {}",
+                *MAP.lock().unwrap().get(&self.operator).unwrap(),
+                self.operator
+            );
             Some(*MAP.lock().unwrap().get(&self.operator).unwrap())
         } else {
+            println!("operator: {}", self.operator);
             self.method.as_ref().map(|m| {
                 m(
                     self.left.as_ref().unwrap().eval().unwrap(),
@@ -95,15 +101,15 @@ impl BNode {
         println!("{:?}", list);
 
         ret.push(format!(".i {}", list.len()));
-        ret.push(format!(".o 1"));
+        ret.push(String::from(".o 1"));
 
         for mut i in 0..=stop_mask {
-            for j in 0..len {
-                let mask: usize = 1 << j;
+            for (j, item) in list.iter().enumerate() {
+                let mask: usize = 1 << (list.len() - 1 - j);
                 MAP.lock()
                     .unwrap()
                     // repair here, to reduce the memory usage
-                    .entry(list[j].clone())
+                    .entry(item.clone())
                     .and_modify(|v| *v = (mask & i) > 0);
             }
             let result: bool = self.eval().unwrap();
