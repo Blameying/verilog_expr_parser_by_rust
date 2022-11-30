@@ -5,7 +5,7 @@ use std::convert::From;
 use std::sync::Mutex;
 
 lazy_static! {
-    static ref MAP: Mutex<HashMap<String, bool>> = {
+    pub static ref MAP: Mutex<HashMap<String, bool>> = {
         #![allow(unused_mut)]
         let mut map = HashMap::new();
         Mutex::new(map)
@@ -13,7 +13,7 @@ lazy_static! {
 }
 
 #[allow(dead_code)]
-struct BNode {
+pub struct BNode {
     value: bool,
     is_leave: bool,
     operator: String,
@@ -42,7 +42,7 @@ impl From<&TreeNode> for BNode {
             "d|" => Some(Box::new(|a: bool, b: bool| a | b)),
             "d&&" => Some(Box::new(|a: bool, b: bool| a & b)),
             "d||" => Some(Box::new(|a: bool, b: bool| a | b)),
-            "Identifier" => {
+            "identifier" => {
                 bnode.is_leave = true;
                 bnode.operator = value.val.clone();
                 MAP.lock().unwrap().insert(value.val.clone(), false);
@@ -51,7 +51,7 @@ impl From<&TreeNode> for BNode {
             _ => None,
         };
 
-        if let None = &func {
+        if func.is_none() {
             panic!("Unsupported operator in expression!");
         }
 
@@ -73,19 +73,60 @@ impl From<&TreeNode> for BNode {
 }
 
 impl BNode {
-    fn eval(&self) -> Option<bool> {
+    pub fn eval(&self) -> Option<bool> {
         if self.is_leave {
             Some(*MAP.lock().unwrap().get(&self.operator).unwrap())
         } else {
-            if let Some(m) = &self.method {
-                Some(m(
+            self.method.as_ref().map(|m| {
+                m(
                     self.left.as_ref().unwrap().eval().unwrap(),
                     self.right.as_ref().unwrap().eval().unwrap(),
-                ))
-            } else {
-                None
-            }
+                )
+            })
         }
+    }
+
+    pub fn create_truthtable(&self) -> (Vec<String>, Vec<String>) {
+        let len: usize = MAP.lock().unwrap().len();
+        let stop_mask: usize = (1 << len) - 1;
+        let mut ret: Vec<String> = Vec::new();
+
+        let list: Vec<String> = MAP.lock().unwrap().keys().cloned().collect();
+        println!("{:?}", list);
+
+        ret.push(format!(".i {}", list.len()));
+        ret.push(format!(".o 1"));
+
+        for mut i in 0..=stop_mask {
+            for j in 0..len {
+                let mask: usize = 1 << j;
+                MAP.lock()
+                    .unwrap()
+                    // repair here, to reduce the memory usage
+                    .entry(list[j].clone())
+                    .and_modify(|v| *v = (mask & i) > 0);
+            }
+            let result: bool = self.eval().unwrap();
+
+            i <<= 1;
+
+            if result {
+                i |= 1;
+            }
+
+            ret.push(format!(
+                "{:0width$b} {:1b}",
+                i >> 1,
+                i & 1,
+                width = list.len()
+            ));
+        }
+        ret.push(String::from(".e"));
+        (ret, list)
+    }
+
+    pub fn get_inputs(&self) -> &MAP {
+        &MAP
     }
 }
 
@@ -114,7 +155,7 @@ mod tests {
 
         let bnode_root = BNode {
             value: false,
-            is_leave: true,
+            is_leave: false,
             operator: String::from("2&"),
             method: Some(Box::new(|a: bool, b: bool| a & b)),
             left: Some(Box::new(bnode_left)),

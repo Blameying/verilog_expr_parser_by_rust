@@ -8,9 +8,12 @@ use ptree::{Color, PrintConfig, Style};
 
 use std::env;
 
+use crate::espresso::espresso_minimizer;
+
 lalrpop_mod!(pub verilog);
 pub mod ast;
 pub mod bdd;
+pub mod espresso;
 
 fn parser_exp(expr: &str) -> bool {
     let config = {
@@ -30,6 +33,37 @@ fn parser_exp(expr: &str) -> bool {
         Ok(t) => {
             println!("AST Tree:");
             print_tree_with(&t, &config).unwrap();
+            let bnode = bdd::BNode::from(&t);
+            let (truthtable, item_name) = bnode.create_truthtable();
+            println!("{:?}", truthtable);
+            let espresso_output: Vec<String> = espresso_minimizer(truthtable);
+            println!("Espresso result: ");
+            for i in item_name.iter() {
+                print!("{}", i);
+            }
+            println!();
+
+            let mut expression: String = String::from("f =");
+
+            for i in espresso_output.iter() {
+                println!("{}", i);
+                for j in 0..item_name.len() {
+                    match i.as_bytes()[j] as char {
+                        '0' => {
+                            expression.push_str(item_name[j].as_str());
+                            expression.push('\'');
+                        }
+                        '1' => expression.push_str(item_name[j].as_str()),
+                        _ => (),
+                    }
+                }
+                if i != espresso_output.iter().last().unwrap() {
+                    expression.push_str(" + ");
+                }
+            }
+
+            println!("{}", expression);
+
             println!("----------------------------------------------");
             true
         }

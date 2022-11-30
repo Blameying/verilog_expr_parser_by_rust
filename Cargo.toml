@@ -11,6 +11,8 @@ lalrpop-util = { version = "0.19.7", features = ["lexer"] }
 regex = "1"
 ptree = "0.4"
 lazy_static = "1.4.0"
+bitmaps = "3.2.0"
 
 [build-dependencies]
 lalrpop = "0.19.7"
+dunce = "1.0.3"
