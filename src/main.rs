@@ -1,3 +1,5 @@
+#![feature(is_some_and)]
+
 #[macro_use]
 extern crate lalrpop_util;
 extern crate ptree;
@@ -9,11 +11,13 @@ use ptree::{Color, PrintConfig, Style};
 use std::env;
 
 use crate::espresso::espresso_minimizer;
+use crate::technology_map::technology_map_by_nand_nor;
 
 lalrpop_mod!(pub verilog);
 pub mod ast;
 pub mod bdd;
 pub mod espresso;
+pub mod technology_map;
 
 fn parser_exp(expr: &str) -> bool {
     let config = {
@@ -39,21 +43,27 @@ fn parser_exp(expr: &str) -> bool {
             let espresso_output: Vec<String> = espresso_minimizer(truthtable);
             println!("Espresso result: ");
             for i in item_name.iter() {
-                print!("{}", i);
+                print!("{}|", i);
             }
             println!();
 
-            let mut expression: String = String::from("f =");
+            let mut expression: String = String::from("f = ");
 
             for i in espresso_output.iter() {
                 println!("{}", i);
-                for j in 0..item_name.len() {
+                for (j, _) in item_name.iter().enumerate() {
                     match i.as_bytes()[j] as char {
                         '0' => {
+                            expression.push('<');
                             expression.push_str(item_name[j].as_str());
                             expression.push('\'');
+                            expression.push('>');
                         }
-                        '1' => expression.push_str(item_name[j].as_str()),
+                        '1' => {
+                            expression.push('<');
+                            expression.push_str(item_name[j].as_str());
+                            expression.push('>');
+                        }
                         _ => (),
                     }
                 }
@@ -62,7 +72,13 @@ fn parser_exp(expr: &str) -> bool {
                 }
             }
 
+            println!("----------------------------------------------");
+            println!("Optimized Boolean Algebra:");
             println!("{}", expression);
+            println!("----------------------------------------------");
+            println!("Technology Mapping:");
+
+            println!("{}", technology_map_by_nand_nor(expression));
 
             println!("----------------------------------------------");
             true
@@ -114,25 +130,24 @@ fn parser_help() {
 }
 
 fn parser_test() {
-    assert_eq!(parser_exp("(1'b1&v)|(~u&(&m| |start)&t)"), true);
-    assert_eq!(parser_exp("001"), false);
-    assert_eq!(parser_exp("100"), true);
-    assert_eq!(parser_exp("1'b01"), true);
-    assert_eq!(parser_exp("1'b2"), false);
-    assert_eq!(parser_exp("2'hff"), true);
-    assert_eq!(parser_exp("2'hf"), true);
-    assert_eq!(parser_exp("1'h2"), true);
-    assert_eq!(parser_exp("1'o7"), true);
-    assert_eq!(parser_exp("1'o8"), false);
-    assert_eq!(parser_exp("2'b"), false);
-    assert_eq!(parser_exp("'b101"), true);
-    assert_eq!(parser_exp("a|||b"), true);
-    assert_eq!(parser_exp("a|| |b"), true);
-    assert_eq!(parser_exp("||a || |b"), false);
-    assert_eq!(
-        parser_module("module mod(input [1:0] in, output out) { assign out = a[0]; }"),
-        true
-    );
+    assert!(parser_exp("(1'b1&v)|(~u&(&m| |start)&t)"));
+    assert!(!parser_exp("001"));
+    assert!(parser_exp("100"));
+    assert!(parser_exp("1'b01"));
+    assert!(!parser_exp("1'b2"));
+    assert!(parser_exp("2'hff"));
+    assert!(parser_exp("2'hf"));
+    assert!(parser_exp("1'h2"));
+    assert!(parser_exp("1'o7"));
+    assert!(!parser_exp("1'o8"));
+    assert!(!parser_exp("2'b"));
+    assert!(parser_exp("'b101"));
+    assert!(parser_exp("a|||b"));
+    assert!(parser_exp("a|| |b"));
+    assert!(!parser_exp("||a || |b"));
+    assert!(parser_module(
+        "module mod(input [1:0] in, output out) { assign out = a[0]; }"
+    ));
 }
 
 fn main() {
