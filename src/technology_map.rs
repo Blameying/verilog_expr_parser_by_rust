@@ -1,8 +1,6 @@
-use daggy::petgraph::adj::EdgeIndex;
-use daggy::petgraph::Direction;
-use daggy::{Dag, NodeIndex};
+use daggy::petgraph::visit::IntoNodeReferences;
+use daggy::{Dag, NodeIndex, Walker};
 use serde::{Deserialize, Serialize};
-use serde_json::Result;
 use std::{collections::HashMap, fs::File};
 
 #[derive(Serialize, Deserialize)]
@@ -29,33 +27,37 @@ struct DAGWithInfo {
     input: u32,
     output: u32,
     dag: Dag<Gate, u32>,
-    cost: u32,
+    cost: f32,
+    input_nodes: Vec<NodeIndex>,
+    output_nodes: Vec<NodeIndex>,
 }
 
 impl DAGWithInfo {
     pub fn new(dag: Dag<Gate, u32>) -> DAGWithInfo {
-        let mut input_nodes: u32 = 0;
-        let mut output_nodes: u32 = 0;
+        let mut input_nodes: Vec<NodeIndex> = Vec::new();
+        let mut output_nodes: Vec<NodeIndex> = Vec::new();
         let mut cost: u32 = 0;
 
-        for n in dag.raw_nodes() {
-            if n.next_edge(Direction::Incoming).index() == u32::MAX as usize {
-                input_nodes += 1;
-            } else if n.next_edge(Direction::Outgoing).index() == u32::MAX as usize {
-                output_nodes += 1;
+        for (index, n) in dag.node_references() {
+            if dag.children(index).iter(&dag).count() == 0 {
+                output_nodes.push(index);
+            } else if dag.parents(index).iter(&dag).count() == 0 {
+                input_nodes.push(index);
             }
 
-            match n.weight {
+            match n {
                 Gate::Input(_) => (),
                 _ => cost += 1,
             };
         }
 
         DAGWithInfo {
-            input: input_nodes,
-            output: output_nodes,
+            input: input_nodes.len() as u32,
+            output: output_nodes.len() as u32,
             dag,
-            cost,
+            cost: cost as f32 / input_nodes.len() as f32,
+            input_nodes,
+            output_nodes,
         }
     }
 }
@@ -66,14 +68,93 @@ enum Gate {
     Or,
     Not,
     Input(String),
-    NAND,
-    NOR,
+    Nand,
+    Nor,
 }
 
-fn straightforward_map(path: &'static str) -> HashMap<String, Vec<DAGWithInfo>> {
+fn replace_node_by_graph(src: &[DAGWithInfo], target: &mut Dag<Gate, u32>, target_node: NodeIndex) {
+    let input_list: Vec<daggy::NodeIndex> = target
+        .parents(target_node)
+        .iter(target)
+        .map(|(_, n)| n)
+        .collect();
+    let output = target.children(target_node).iter(target).next();
+    let mut stack: Vec<NodeIndex> = Vec::new();
+    stack.clone_from(&input_list);
+
+    while !stack.is_empty() {
+        let sub_pattern_option = src.iter().find(|f| f.input as usize <= stack.len());
+
+        if sub_pattern_option.is_none() {
+            break;
+        }
+
+        let sub_pattern = sub_pattern_option.unwrap();
+
+        let root = sub_pattern.output_nodes.first().unwrap();
+        let new_root = target.add_node(sub_pattern.dag.node_weight(*root).unwrap().clone());
+
+        /*(index in sub_pattern, index in target) */
+        let mut parent_stack: Vec<(NodeIndex, NodeIndex)> = Vec::new();
+
+        for (_, n) in sub_pattern.dag.parents(*root).iter(&sub_pattern.dag) {
+            let idx = target.add_node(sub_pattern.dag.node_weight(n).unwrap().clone());
+            target.add_edge(idx, new_root, 1).unwrap();
+            parent_stack.push((n, idx));
+        }
+
+        let mut new_input_list: Vec<NodeIndex> = Vec::new();
+        while !parent_stack.is_empty() {
+            let mut repeat_node: HashMap<NodeIndex, NodeIndex> = HashMap::new();
+            for (idx_sub, idx_new) in &parent_stack {
+                if sub_pattern
+                    .dag
+                    .parents(*idx_sub)
+                    .iter(&sub_pattern.dag)
+                    .count()
+                    != 0
+                {
+                    for (_, n) in sub_pattern.dag.parents(*idx_sub).iter(&sub_pattern.dag) {
+                        if repeat_node.contains_key(&n) {
+                            target
+                                .add_edge(*repeat_node.get(&n).unwrap(), *idx_new, 1)
+                                .unwrap();
+                        } else {
+                            let idx =
+                                target.add_node(sub_pattern.dag.node_weight(n).unwrap().clone());
+                            target.add_edge(idx, *idx_new, 1).unwrap();
+                            repeat_node.insert(n, idx);
+                        }
+                    }
+                } else {
+                    new_input_list.push(*idx_new);
+                }
+            }
+            parent_stack.clear();
+            for (k, v) in repeat_node {
+                parent_stack.push((k, v));
+            }
+        }
+
+        for i in new_input_list {
+            let idx = stack.pop().unwrap();
+            target.add_edge(idx, i, 1).unwrap();
+        }
+
+        stack.push(new_root);
+        if input_list.len() == 1 {
+            break;
+        }
+    }
+
+    if let Some((_, n)) = output {
+        target.add_edge(stack.pop().unwrap(), n, 1).unwrap();
+    }
+}
+
+fn straightforward_map(path: &'static str, mut origin: Dag<Gate, u32>) -> Dag<Gate, u32> {
     let file = File::open(path).unwrap();
     let lib: GateLibrary = serde_json::from_reader(file).unwrap();
-    let mut map: HashMap<String, Vec<DAGWithInfo>> = HashMap::new();
 
     let get_dag = |v: &Vec<PatternGraph>| -> Vec<DAGWithInfo> {
         let mut dag_list: Vec<DAGWithInfo> = Vec::new();
@@ -82,8 +163,8 @@ fn straightforward_map(path: &'static str) -> HashMap<String, Vec<DAGWithInfo>> 
             let mut hashmap: HashMap<u32, NodeIndex> = HashMap::new();
             for n in g.nodes.iter() {
                 let gate: Gate = match n.name.as_str() {
-                    "NOR" => Gate::NOR,
-                    "NAND" => Gate::NAND,
+                    "NOR" => Gate::Nor,
+                    "NAND" => Gate::Nand,
                     "INPUT" => Gate::Input(n.id.to_string()),
                     _ => panic!("Error gate type in json"),
                 };
@@ -104,11 +185,34 @@ fn straightforward_map(path: &'static str) -> HashMap<String, Vec<DAGWithInfo>> 
         dag_list
     };
 
-    map.insert("AND".to_string(), get_dag(&lib.and));
-    map.insert("OR".to_string(), get_dag(&lib.or));
-    map.insert("NOT".to_string(), get_dag(&lib.not));
+    let mut and_lib = get_dag(&lib.and);
+    let mut not_lib = get_dag(&lib.not);
+    let mut or_lib = get_dag(&lib.or);
 
-    map
+    and_lib.sort_by(|a, b| a.cost.partial_cmp(&b.cost).unwrap());
+    not_lib.sort_by(|a, b| a.cost.partial_cmp(&b.cost).unwrap());
+    or_lib.sort_by(|a, b| a.cost.partial_cmp(&b.cost).unwrap());
+
+    let target = origin.clone();
+
+    for (index, n) in target.node_references() {
+        match n {
+            Gate::And => replace_node_by_graph(&and_lib, &mut origin, index),
+            Gate::Not => replace_node_by_graph(&not_lib, &mut origin, index),
+            Gate::Or => replace_node_by_graph(&or_lib, &mut origin, index),
+            _ => (),
+        }
+    }
+
+    origin.filter_map(
+        |_, n| match n {
+            Gate::And => None,
+            Gate::Not => None,
+            Gate::Or => None,
+            _ => Some(n.clone()),
+        },
+        |_, e| Some(*e),
+    )
 }
 
 fn transform_boolean_algebra_to_dag(boolean_function: String) -> Dag<Gate, u32> {
@@ -147,16 +251,20 @@ fn transform_boolean_algebra_to_dag(boolean_function: String) -> Dag<Gate, u32> 
     dag
 }
 
+fn generate_netlist(dag: Dag<Gate, u32>) {
+    let dag_info = DAGWithInfo(dag);
+    let mut result = String::from("module test(");
+}
+
 pub fn technology_map_by_nand_nor(boolean_function: String) -> String {
     let dag = transform_boolean_algebra_to_dag(boolean_function);
 
-    for n in dag.raw_nodes() {
-        println!("{:?} {:?}", n.weight, n.next_edge(Direction::Incoming));
-    }
+    let lib = straightforward_map(
+        "/home/blame/Workspace/verilog_expr_parser_by_rust/input/library.json",
+        dag,
+    );
 
-    let lib =
-        straightforward_map("/home/blame/Workspace/verilog_expr_parser_by_rust/input/library.json");
-    // for (i, _) in inputs.iter().enumerate() {}
-    //
+    println!("lib: {:?}", lib);
+
     String::from("Not finished")
 }
