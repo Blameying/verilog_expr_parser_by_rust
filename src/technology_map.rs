@@ -220,6 +220,7 @@ fn transform_boolean_algebra_to_dag(boolean_function: String) -> Dag<Gate, u32> 
     let or_level: Vec<&str> = last.split(&['+'][..]).map(|f| f.trim()).collect();
     let mut and_level: Vec<Vec<String>> = Vec::new();
     let mut dag: Dag<Gate, u32> = Dag::new();
+    let mut input_nodes: HashMap<String, NodeIndex> = HashMap::new();
 
     for v in or_level.iter() {
         let list: Vec<String> = v
@@ -238,11 +239,17 @@ fn transform_boolean_algebra_to_dag(boolean_function: String) -> Dag<Gate, u32> 
         for i in v.iter() {
             if i.find('\'').is_some() {
                 let not_gate = dag.add_node(Gate::Not);
-                let input = dag.add_node(Gate::Input(i.clone()));
+                let input = input_nodes
+                    .entry(i.trim_matches('\'').to_string())
+                    .or_insert(dag.add_node(Gate::Input(i.trim_matches('\'').to_string())));
                 dag.add_edge(not_gate, and_gate, 1).unwrap();
-                dag.add_edge(input, not_gate, 1).unwrap();
+                dag.add_edge(*input, not_gate, 1).unwrap();
+            } else if input_nodes.contains_key(i) {
+                dag.add_edge(*input_nodes.get(i).unwrap(), and_gate, 1)
+                    .unwrap();
             } else {
-                let input = dag.add_node(Gate::Input(i.clone()));
+                let input = dag.add_node(Gate::Input(i.to_string()));
+                input_nodes.insert(i.to_string(), input);
                 dag.add_edge(input, and_gate, 1).unwrap();
             }
         }
