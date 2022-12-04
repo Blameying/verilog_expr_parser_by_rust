@@ -75,14 +75,8 @@ impl From<&TreeNode> for BNode {
 impl BNode {
     pub fn eval(&self) -> Option<bool> {
         if self.is_leave {
-            println!(
-                "leave: {}, operator: {}",
-                *MAP.lock().unwrap().get(&self.operator).unwrap(),
-                self.operator
-            );
             Some(*MAP.lock().unwrap().get(&self.operator).unwrap())
         } else {
-            println!("operator: {}", self.operator);
             self.method.as_ref().map(|m| {
                 m(
                     self.left.as_ref().unwrap().eval().unwrap(),

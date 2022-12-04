@@ -78,7 +78,7 @@ fn parser_exp(expr: &str) -> bool {
             println!("----------------------------------------------");
             println!("Technology Mapping:");
 
-            println!("{}", technology_map_by_nand_nor(expression));
+            println!("\n\n{}", technology_map_by_nand_nor(expression));
 
             println!("----------------------------------------------");
             true

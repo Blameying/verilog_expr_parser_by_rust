@@ -251,9 +251,101 @@ fn transform_boolean_algebra_to_dag(boolean_function: String) -> Dag<Gate, u32> 
     dag
 }
 
-fn generate_netlist(dag: Dag<Gate, u32>) {
-    let dag_info = DAGWithInfo(dag);
+fn generate_netlist(dag: Dag<Gate, u32>) -> String {
+    let dag_info = DAGWithInfo::new(dag);
+    let out_name = "out";
     let mut result = String::from("module test(");
+    let mut name_pool: HashMap<NodeIndex, String> = HashMap::new();
+
+    /* module interface definition */
+    for i in dag_info.input_nodes.iter() {
+        if let Gate::Input(s) = dag_info.dag.node_weight(*i).unwrap() {
+            result.push_str("input ");
+            result.push_str(s.trim_matches('\''));
+            result.push_str(", ");
+            name_pool.insert(*i, s.trim_matches('\'').to_string());
+        }
+    }
+
+    result.push_str(format!("output {out_name});\n").as_str());
+
+    /* wire name generator */
+    let namer = || unsafe {
+        static mut ID: usize = 0;
+        ID += 1;
+        ID
+    };
+
+    let gate_namer = || unsafe {
+        static mut ID: usize = 0;
+        ID += 1;
+        ID
+    };
+
+    let mut parent_stack: Vec<NodeIndex> = Vec::new();
+    parent_stack.push(*dag_info.output_nodes.first().unwrap());
+    name_pool.insert(
+        *dag_info.output_nodes.first().unwrap(),
+        out_name.to_string(),
+    );
+
+    let mut gates_list: String = String::new();
+    while !parent_stack.is_empty() {
+        let mut all_child: Vec<NodeIndex> = Vec::new();
+        all_child.clear();
+        for &n in parent_stack.iter() {
+            let mut gate_name = match dag_info.dag.node_weight(n).unwrap() {
+                Gate::Nor => format!("NOR g{}(", gate_namer()),
+                Gate::Nand => format!("NAND g{}(", gate_namer()),
+                _ => panic!("It should not be here"),
+            };
+
+            for (_, n) in dag_info.dag.parents(n).iter(&dag_info.dag) {
+                let mut parent_recursion = dag_info
+                    .dag
+                    .recursive_walk(n, |g, idx| g.parents(idx).iter(g).next());
+
+                while let Some((_, node)) = parent_recursion.walk_next(&dag_info.dag) {
+                    if dag_info.dag[node] == Gate::Nor
+                        || dag_info.dag[node] == Gate::Nand
+                        || name_pool.contains_key(&node)
+                    {
+                        if let Gate::Input(input_var) = dag_info.dag.node_weight(node).unwrap() {
+                            gate_name.push_str(input_var.trim_matches('\''));
+                            gate_name.push_str(", ");
+                        } else {
+                            let value = name_pool.entry(node).or_insert(format!("t{}", namer()));
+                            gate_name.push_str(value.as_str());
+                            gate_name.push_str(", ");
+                            if !all_child.contains(&node) {
+                                all_child.push(node);
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+            gate_name.push_str(name_pool.get(&n).unwrap().as_str());
+            gate_name.push_str(");\n");
+
+            gates_list += &gate_name;
+        }
+        parent_stack.clear();
+        parent_stack.clone_from(&all_child);
+    }
+
+    for (k, v) in name_pool {
+        if (dag_info.dag[k] == Gate::Nand || dag_info.dag[k] == Gate::Nor)
+            && (v.as_bytes()[0] as char == 't')
+        {
+            result += &format!("wire {};\n", v);
+        }
+    }
+
+    result += &gates_list;
+    result.push_str("endmodule");
+
+    result
 }
 
 pub fn technology_map_by_nand_nor(boolean_function: String) -> String {
@@ -265,6 +357,5 @@ pub fn technology_map_by_nand_nor(boolean_function: String) -> String {
     );
 
     println!("lib: {:?}", lib);
-
-    String::from("Not finished")
+    generate_netlist(lib)
 }
