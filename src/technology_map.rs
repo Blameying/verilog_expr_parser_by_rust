@@ -357,5 +357,16 @@ pub fn technology_map_by_nand_nor(boolean_function: String) -> String {
     );
 
     println!("lib: {:?}", lib);
+    if lib.node_count() == 1 {
+        let (_, node) = lib.node_references().next().unwrap();
+        if let Gate::Input(node_name) = node {
+            let result = format!(
+                "module test(input {}, output out);\nassign out = {};\nendmodule\n",
+                node_name, node_name
+            );
+            return result;
+        }
+    }
+
     generate_netlist(lib)
 }

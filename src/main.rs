@@ -78,7 +78,14 @@ fn parser_exp(expr: &str) -> bool {
             println!("----------------------------------------------");
             println!("Technology Mapping:");
 
-            println!("\n\n{}", technology_map_by_nand_nor(expression));
+            if item_name.len() == 1 && expression.find('\'').is_none() {
+                println!("module test(input {}, output out);", item_name[0]);
+                println!("assign out = {};", item_name[0]);
+                println!("endmodule")
+            } else {
+                println!("{:?}", item_name);
+                println!("\n\n{}", technology_map_by_nand_nor(expression));
+            }
 
             println!("----------------------------------------------");
             true
