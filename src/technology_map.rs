@@ -152,7 +152,7 @@ fn replace_node_by_graph(src: &[DAGWithInfo], target: &mut Dag<Gate, u32>, targe
     }
 }
 
-fn straightforward_map(path: &'static str, mut origin: Dag<Gate, u32>) -> Dag<Gate, u32> {
+fn straightforward_map(path: &str, mut origin: Dag<Gate, u32>) -> Dag<Gate, u32> {
     let file = File::open(path).unwrap();
     let lib: GateLibrary = serde_json::from_reader(file).unwrap();
 
@@ -355,13 +355,10 @@ fn generate_netlist(dag: Dag<Gate, u32>) -> String {
     result
 }
 
-pub fn technology_map_by_nand_nor(boolean_function: String) -> String {
+pub fn technology_map_by_nand_nor(boolean_function: String, path: &str) -> String {
     let dag = transform_boolean_algebra_to_dag(boolean_function);
 
-    let lib = straightforward_map(
-        "/home/blame/Workspace/verilog_expr_parser_by_rust/input/library.json",
-        dag,
-    );
+    let lib = straightforward_map(path, dag);
 
     println!("lib: {:?}", lib);
     if lib.node_count() == 1 {

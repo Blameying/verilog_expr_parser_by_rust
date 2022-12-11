@@ -19,7 +19,7 @@ pub mod bdd;
 pub mod espresso;
 pub mod technology_map;
 
-fn parser_exp(expr: &str) -> bool {
+fn parser_exp(expr: &str, path: Option<&str>) -> bool {
     let config = {
         let mut config = PrintConfig::from_env();
         config.leaf = Style {
@@ -84,7 +84,10 @@ fn parser_exp(expr: &str) -> bool {
                 println!("endmodule")
             } else {
                 println!("{:?}", item_name);
-                println!("\n\n{}", technology_map_by_nand_nor(expression));
+                println!(
+                    "\n\n{}",
+                    technology_map_by_nand_nor(expression, path.unwrap_or("./library.json"))
+                );
             }
 
             println!("----------------------------------------------");
@@ -136,22 +139,22 @@ fn parser_help() {
     println!("parser test");
 }
 
-fn parser_test() {
-    assert!(parser_exp("(1'b1&v)|(~u&(&m| |start)&t)"));
-    assert!(!parser_exp("001"));
-    assert!(parser_exp("100"));
-    assert!(parser_exp("1'b01"));
-    assert!(!parser_exp("1'b2"));
-    assert!(parser_exp("2'hff"));
-    assert!(parser_exp("2'hf"));
-    assert!(parser_exp("1'h2"));
-    assert!(parser_exp("1'o7"));
-    assert!(!parser_exp("1'o8"));
-    assert!(!parser_exp("2'b"));
-    assert!(parser_exp("'b101"));
-    assert!(parser_exp("a|||b"));
-    assert!(parser_exp("a|| |b"));
-    assert!(!parser_exp("||a || |b"));
+fn parser_test(path: &str) {
+    assert!(parser_exp("(1'b1&v)|(~u&(&m| |start)&t)", Some(path)));
+    assert!(!parser_exp("001", Some(path)));
+    assert!(parser_exp("100", Some(path)));
+    assert!(parser_exp("1'b01", Some(path)));
+    assert!(!parser_exp("1'b2", Some(path)));
+    assert!(parser_exp("2'hff", Some(path)));
+    assert!(parser_exp("2'hf", Some(path)));
+    assert!(parser_exp("1'h2", Some(path)));
+    assert!(parser_exp("1'o7", Some(path)));
+    assert!(!parser_exp("1'o8", Some(path)));
+    assert!(!parser_exp("2'b", Some(path)));
+    assert!(parser_exp("'b101", Some(path)));
+    assert!(parser_exp("a|||b", Some(path)));
+    assert!(parser_exp("a|| |b", Some(path)));
+    assert!(!parser_exp("||a || |b", Some(path)));
     assert!(parser_module(
         "module mod(input [1:0] in, output out) { assign out = a[0]; }"
     ));
@@ -160,12 +163,28 @@ fn parser_test() {
 fn main() {
     let args: Vec<String> = env::args().collect();
     match args.len() {
+        4 => {
+            let type_here = &args[1];
+            let expr = &args[2];
+            match type_here.trim().to_lowercase().as_str() {
+                "expr" => parser_exp(expr, Some(args[3].as_str())),
+                "module" => parser_module(expr),
+                _ => {
+                    parser_help();
+                    false
+                }
+            };
+        }
         3 => {
             let type_here = &args[1];
             let expr = &args[2];
             match type_here.trim().to_lowercase().as_str() {
-                "expr" => parser_exp(expr),
+                "expr" => parser_exp(expr, Some("./library.json")),
                 "module" => parser_module(expr),
+                "test" => {
+                    parser_test(expr.as_str());
+                    true
+                }
                 _ => {
                     parser_help();
                     false
@@ -175,7 +194,7 @@ fn main() {
         2 => {
             let type_here = &args[1];
             if type_here.trim().to_lowercase().as_str() == "test" {
-                parser_test();
+                parser_test("./library.json");
             } else {
                 parser_help();
             }
