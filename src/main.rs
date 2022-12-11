@@ -131,12 +131,12 @@ fn parser_module(expr: &str) -> bool {
 }
 
 fn parser_help() {
-    println!("Format: parser [type] [expr]");
+    println!("Format: parser [type] [expr] [path-to-lib file]");
     println!("    [type]: expr, module, test");
     println!("    [expr]: \"~a\"");
     println!("example:");
-    println!("parser expr (1'b1&v)|(~u&(&m| |start)&t)");
-    println!("parser test");
+    println!("parser expr (1'b1&v)|(~u&(&m| |start)&t) ./library.json");
+    println!("parser test ./library.json");
 }
 
 fn parser_test(path: &str) {
